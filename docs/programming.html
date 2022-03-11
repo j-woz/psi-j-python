@@ -1,0 +1,324 @@
+
+
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>The PSI/J API &#8212; Portable Submission Interface for Jobs 0.0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/cloud.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Noticia+Text:400,i,b,bi|Open+Sans:400,i,b,bi|Roboto+Mono:400,i,b,bi&amp;display=swap" type="text/css" />
+    
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+
+    
+    
+     
+        <script src="_static/jquery.cookie.js"></script>
+    
+
+    
+     
+        <script src="_static/cloud.base.js"></script>
+    
+
+    
+     
+        <script src="_static/cloud.js"></script>
+    
+
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="src" href=".generated/modules.html" />
+    <link rel="prev" title="Testing PSI/J" href="testing.html" /> 
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head><body>
+    <div class="relbar-top">
+        
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> &nbsp; &nbsp;</li>
+        <li class="right" >
+          <a href=".generated/modules.html" title="src"
+             accesskey="N">next</a> &nbsp; &nbsp;</li>
+        <li class="right" >
+          <a href="testing.html" title="Testing PSI/J"
+             accesskey="P">previous</a> &nbsp; &nbsp;</li>
+    <li><a href="index.html">Portable Submission Interface for Jobs 0.0.1 documentation</a> &#187;</li>
+
+        <li class="nav-item nav-item-this"><a href="">The PSI/J API</a></li> 
+      </ul>
+    </div>
+    </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="the-psi-j-api">
+<h1>The PSI/J API<a class="headerlink" href="#the-psi-j-api" title="Permalink to this headline">¶</a></h1>
+<section id="the-psi-j-core">
+<h2>The PSI/J core<a class="headerlink" href="#the-psi-j-core" title="Permalink to this headline">¶</a></h2>
+<p>The core API contains the central components of PSI/J. The core API classes are independent of executor implementations. User code should only program against the core API. The major classes are:</p>
+<dl class="simple">
+<dt><a class="reference internal" href=".generated/psij.html#psij.job.Job" title="psij.job.Job"><code class="xref py py-class docutils literal notranslate"><span class="pre">Job</span></code></a></dt><dd><p>Represents a scheduler job, including all its details and state.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.html#psij.job_spec.JobSpec" title="psij.job_spec.JobSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">JobSpec</span></code></a></dt><dd><p>Contains the static description of a job at a level that would be supported by the POSIX interface, such as path to the executable, arguments, etc.</p>
+</dd>
+</dl>
+<p><a class="reference internal" href=".generated/psij.html#psij.resource_spec.ResourceSpec" title="psij.resource_spec.ResourceSpec"><code class="xref py py-class docutils literal notranslate"><span class="pre">ResourceSpec</span></code></a></p>
+<blockquote>
+<div><p>Describes resource requirements for the job, such as number of nodes, etc.</p>
+</div></blockquote>
+<dl class="simple">
+<dt><a class="reference internal" href=".generated/psij.html#psij.job_attributes.JobAttributes" title="psij.job_attributes.JobAttributes"><code class="xref py py-class docutils literal notranslate"><span class="pre">JobAttributes</span></code></a></dt><dd><p>Contains information about a job that goes beyond POSIX and is specific to batch schedulers, such as a queue name, walltime limit, etc.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.html#psij.job_state.JobState" title="psij.job_state.JobState"><code class="xref py py-class docutils literal notranslate"><span class="pre">JobState</span></code></a></dt><dd><p>An enumeration containing all possible states of a job.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.html#psij.job_status.JobStatus" title="psij.job_status.JobStatus"><code class="xref py py-class docutils literal notranslate"><span class="pre">JobStatus</span></code></a></dt><dd><p>An object that represents the transition of a job to a new <a class="reference internal" href=".generated/psij.html#psij.job_state.JobState" title="psij.job_state.JobState"><code class="xref py py-class docutils literal notranslate"><span class="pre">JobState</span></code></a>.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.html#psij.job_executor.JobExecutor" title="psij.job_executor.JobExecutor"><code class="xref py py-class docutils literal notranslate"><span class="pre">JobExecutor</span></code></a></dt><dd><p>The base class for a concrete method of executing a job, such as Slurm, or PBS.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.html#psij.job_launcher.Launcher" title="psij.job_launcher.Launcher"><code class="xref py py-class docutils literal notranslate"><span class="pre">Launcher</span></code></a></dt><dd><p>A base class representing a method of actually launching a job once resources are allocated for it, such as <cite>mpirun</cite>, <cite>srun</cite>, etc.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.html#module-psij.exceptions" title="psij.exceptions"><code class="xref py py-mod docutils literal notranslate"><span class="pre">exceptions</span></code></a></dt><dd><p>A module that contanins exception classes for the PSI/J Python library.</p>
+</dd>
+</dl>
+</section>
+<section id="executors">
+<span id="id1"></span><h2>Executors<a class="headerlink" href="#executors" title="Permalink to this headline">¶</a></h2>
+<p>Executors are concrete implementations of mechanisms that execute jobs. To get an instance of a specific executor, call <a class="reference internal" href=".generated/psij.html#psij.job_executor.JobExecutor.get_instance" title="psij.job_executor.JobExecutor.get_instance"><code class="xref py py-meth docutils literal notranslate"><span class="pre">JobExecutor.get_instance(name)</span></code></a>, with <code class="docutils literal notranslate"><span class="pre">name</span></code> being one of the installed executor names. Executors can be installed from multiple sources, so the precise list of executors avaiable to a specific installation of the PSI/J Python library can vary. In order to get a list of available executors, you can run, in a terminal:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$ python -m psij plugins
+</pre></div>
+</div>
+<p>The executor implementations provided by this version of PSI/J Python are:</p>
+<dl class="simple">
+<dt><a class="reference internal" href=".generated/psij.executors.batch.html#psij.executors.batch.cobalt.CobaltJobExecutor" title="psij.executors.batch.cobalt.CobaltJobExecutor"><code class="xref py py-class docutils literal notranslate"><span class="pre">cobalt</span></code></a></dt><dd><p>A job executor that can interact with the <a class="reference external" href="https://xgitlab.cels.anl.gov/aig-public/cobalt">Cobalt HPC Job Scheduler</a>, which is used by <a class="reference external" href="www.anl.gov">Argonne’s</a> <a class="reference external" href="www.alcf.anl.gov">ALCF</a> systems.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.executors.html#psij.executors.flux.FluxJobExecutor" title="psij.executors.flux.FluxJobExecutor"><code class="xref py py-class docutils literal notranslate"><span class="pre">flux</span></code></a></dt><dd><p>Job executor for the <a class="reference external" href="http://flux-framework.org/">Flux scheduler</a>.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.executors.html#psij.executors.local.LocalJobExecutor" title="psij.executors.local.LocalJobExecutor"><code class="xref py py-class docutils literal notranslate"><span class="pre">local</span></code></a></dt><dd><p>A job executor that runs jobs locally by forking a subprocess.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.executors.batch.html#psij.executors.batch.lsf.LsfJobExecutor" title="psij.executors.batch.lsf.LsfJobExecutor"><code class="xref py py-class docutils literal notranslate"><span class="pre">lsf</span></code></a></dt><dd><p>An implementation of a job executor for the <a class="reference external" href="https://www.ibm.com/docs/en/spectrum-lsf">IBM Spectrum LSF workload manager</a>.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.executors.html#psij.executors.rp.RPJobExecutor" title="psij.executors.rp.RPJobExecutor"><code class="xref py py-class docutils literal notranslate"><span class="pre">rp</span></code></a></dt><dd><p>Job executor for the <a class="reference external" href="https://radical-cybertools.github.io/radical-pilot/">RADICAL Pilot system</a>.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.executors.html#psij.executors.saga.SagaExecutor" title="psij.executors.saga.SagaExecutor"><code class="xref py py-class docutils literal notranslate"><span class="pre">saga</span></code></a></dt><dd><p>An executor that delegates job execution to the <a class="reference external" href="https://radical-cybertools.github.io/saga-python/index.html">RADICAL-SAGA</a> library.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.executors.batch.html#psij.executors.batch.slurm.SlurmJobExecutor" title="psij.executors.batch.slurm.SlurmJobExecutor"><code class="xref py py-class docutils literal notranslate"><span class="pre">slurm</span></code></a></dt><dd><p>An executor for the <a class="reference external" href="https://slurm.schedmd.com/overview.html">Slurm Workload Manager</a>.</p>
+</dd>
+</dl>
+</section>
+<section id="launchers">
+<span id="id2"></span><h2>Launchers<a class="headerlink" href="#launchers" title="Permalink to this headline">¶</a></h2>
+<p>Launchers are mechanisms to start the actual jobs on batch schedulers once a set of nodes has been allocated for the job. In essence, launchers are wrappers around the job executable which can provide additional features, such as setting up an MPI environment, starting a copy of the job executable on each allocated node, etc. To get a launcher instance, call <a class="reference internal" href=".generated/psij.html#psij.job_launcher.Launcher.get_instance" title="psij.job_launcher.Launcher.get_instance"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Launcher.get_instance(name)</span></code></a> with <code class="docutils literal notranslate"><span class="pre">name</span></code> being the name of a launcher. Like job executors, above, launchers are plugins and can come from various places. To obtain a list of launchers, you can run:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>$ python -m psij plugins
+</pre></div>
+</div>
+<p>The PSI/J Python library comes with a core set of launchers, which are:</p>
+<dl class="simple">
+<dt><a class="reference internal" href=".generated/psij.launchers.html#psij.launchers.aprun.AprunLauncher" title="psij.launchers.aprun.AprunLauncher"><code class="xref py py-class docutils literal notranslate"><span class="pre">aprun</span></code></a></dt><dd><p>Launches jobs using <a class="reference external" href="https://xgitlab.cels.anl.gov/aig-public/cobalt">Cobalt’s</a> <code class="docutils literal notranslate"><span class="pre">aprun</span></code>.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.launchers.html#psij.launchers.jsrun.JsrunLauncher" title="psij.launchers.jsrun.JsrunLauncher"><code class="xref py py-class docutils literal notranslate"><span class="pre">jsrun</span></code></a></dt><dd><p>Starts jobs using <code class="docutils literal notranslate"><span class="pre">jsrun</span></code> provided by the <a class="reference external" href="https://www.ibm.com/docs/en/spectrum-lsf">IBM Spectrum LSF workload manager</a>.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.launchers.html#psij.launchers.mpirun.MPILauncher" title="psij.launchers.mpirun.MPILauncher"><code class="xref py py-class docutils literal notranslate"><span class="pre">mpirun</span></code></a></dt><dd><p>Launches jobs using <code class="docutils literal notranslate"><span class="pre">mpirun</span></code>, which is a tool provided by <a class="reference external" href="https://www.mpi-forum.org/">MPI</a> implementations, such as <a class="reference external" href="https://www.open-mpi.org/">Open MPI</a>.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.launchers.html#psij.launchers.multiple.MultipleLauncher" title="psij.launchers.multiple.MultipleLauncher"><code class="xref py py-class docutils literal notranslate"><span class="pre">multiple</span></code></a></dt><dd><p>Starts multiple identical instances of the same process on the same machine.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.launchers.html#psij.launchers.single.SingleLauncher" title="psij.launchers.single.SingleLauncher"><code class="xref py py-class docutils literal notranslate"><span class="pre">single</span></code></a></dt><dd><p>Starts a single instance of the job executable locally. This is the default launcher, which is used if nothing is explicitly specified.</p>
+</dd>
+<dt><a class="reference internal" href=".generated/psij.launchers.html#psij.launchers.srun.SrunLauncher" title="psij.launchers.srun.SrunLauncher"><code class="xref py py-class docutils literal notranslate"><span class="pre">srun</span></code></a></dt><dd><p>Starts job using <code class="docutils literal notranslate"><span class="pre">srun</span></code>, which is part of the <a class="reference external" href="https://slurm.schedmd.com/overview.html">Slurm Workload Manager</a>.</p>
+</dd>
+</dl>
+</section>
+<section id="api-reference">
+<h2>API Reference<a class="headerlink" href="#api-reference" title="Permalink to this headline">¶</a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href=".generated/modules.html">src</a><ul>
+<li class="toctree-l2"><a class="reference internal" href=".generated/psij.html">psij package</a><ul>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#subpackages">Subpackages</a><ul>
+<li class="toctree-l4"><a class="reference internal" href=".generated/psij.executors.html">psij.executors package</a><ul>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.executors.html#subpackages">Subpackages</a><ul>
+<li class="toctree-l6"><a class="reference internal" href=".generated/psij.executors.batch.html">psij.executors.batch package</a><ul>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#submodules">Submodules</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch.batch_scheduler_executor">psij.executors.batch.batch_scheduler_executor module</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch.cobalt">psij.executors.batch.cobalt module</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch.escape_functions">psij.executors.batch.escape_functions module</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch.lsf">psij.executors.batch.lsf module</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch.pbspro">psij.executors.batch.pbspro module</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch.script_generator">psij.executors.batch.script_generator module</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch.slurm">psij.executors.batch.slurm module</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch.template_function_library">psij.executors.batch.template_function_library module</a></li>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.executors.batch.html#module-psij.executors.batch">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.executors.html#submodules">Submodules</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.executors.html#module-psij.executors.flux">psij.executors.flux module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.executors.html#module-psij.executors.local">psij.executors.local module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.executors.html#module-psij.executors.rp">psij.executors.rp module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.executors.html#module-psij.executors.saga">psij.executors.saga module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.executors.html#module-psij.executors">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href=".generated/psij.launchers.html">psij.launchers package</a><ul>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#subpackages">Subpackages</a><ul>
+<li class="toctree-l6"><a class="reference internal" href=".generated/psij.launchers.scripts.html">psij.launchers.scripts package</a><ul>
+<li class="toctree-l7"><a class="reference internal" href=".generated/psij.launchers.scripts.html#module-psij.launchers.scripts">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#submodules">Submodules</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#module-psij.launchers.aprun">psij.launchers.aprun module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#module-psij.launchers.jsrun">psij.launchers.jsrun module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#module-psij.launchers.mpirun">psij.launchers.mpirun module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#module-psij.launchers.multiple">psij.launchers.multiple module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#module-psij.launchers.script_based_launcher">psij.launchers.script_based_launcher module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#module-psij.launchers.single">psij.launchers.single module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#module-psij.launchers.srun">psij.launchers.srun module</a></li>
+<li class="toctree-l5"><a class="reference internal" href=".generated/psij.launchers.html#module-psij.launchers">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.descriptor">psij.descriptor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.exceptions">psij.exceptions module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.job">psij.job module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.job_attributes">psij.job_attributes module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.job_executor">psij.job_executor module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.job_executor_config">psij.job_executor_config module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.job_launcher">psij.job_launcher module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.job_spec">psij.job_spec module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.job_state">psij.job_state module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.job_status">psij.job_status module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.resource_spec">psij.resource_spec module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.serialize">psij.serialize module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij.utils">psij.utils module</a></li>
+<li class="toctree-l3"><a class="reference internal" href=".generated/psij.html#module-psij">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><div class="sphinx-toc sphinxlocaltoc">
+    <h3><a href="index.html">Page contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">The PSI/J API</a><ul>
+<li><a class="reference internal" href="#the-psi-j-core">The PSI/J core</a></li>
+<li><a class="reference internal" href="#executors">Executors</a></li>
+<li><a class="reference internal" href="#launchers">Launchers</a></li>
+<li><a class="reference internal" href="#api-reference">API Reference</a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div class="sphinxprev">
+    <h4>Previous page</h4>
+    <p class="topless"><a href="testing.html"
+                          title="Previous page">&larr; Testing PSI/J</a></p>
+  </div>
+  <div class="sphinxnext">
+    <h4>Next page</h4>
+    <p class="topless"><a href=".generated/modules.html"
+                          title="Next page">&rarr; src</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/programming.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+    
+    
+        <div class="sidebar-toggle-group no-js">
+            
+            <button class="sidebar-toggle" id="sidebar-hide" title="Hide the sidebar menu">
+                 «
+                <span class="show-for-small">hide menu</span>
+                
+            </button>
+            <button class="sidebar-toggle" id="sidebar-show" title="Show the sidebar menu">
+                
+                <span class="show-for-small">menu</span>
+                <span class="hide-for-small">sidebar</span>
+                 »
+            </button>
+        </div>
+    
+      <div class="clearer"></div>
+    </div>
+    <div class="relbar-bottom">
+        
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> &nbsp; &nbsp;</li>
+        <li class="right" >
+          <a href=".generated/modules.html" title="src"
+             >next</a> &nbsp; &nbsp;</li>
+        <li class="right" >
+          <a href="testing.html" title="Testing PSI/J"
+             >previous</a> &nbsp; &nbsp;</li>
+    <li><a href="index.html">Portable Submission Interface for Jobs 0.0.1 documentation</a> &#187;</li>
+
+        <li class="nav-item nav-item-this"><a href="">The PSI/J API</a></li> 
+      </ul>
+    </div>
+    </div>
+
+    <div class="footer" role="contentinfo">
+        &#169; Copyright The ExaWorks Team.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.4.0.
+    </div>
+    <!-- cloud_sptheme 1.4 -->
+  </body>
+</html>

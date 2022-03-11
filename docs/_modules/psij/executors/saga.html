@@ -1,0 +1,376 @@
+
+
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>psij.executors.saga &#8212; Portable Submission Interface for Jobs 0.0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/cloud.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Noticia+Text:400,i,b,bi|Open+Sans:400,i,b,bi|Roboto+Mono:400,i,b,bi&amp;display=swap" type="text/css" />
+    
+    <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+
+    
+    
+     
+        <script src="../../../_static/jquery.cookie.js"></script>
+    
+
+    
+     
+        <script src="../../../_static/cloud.base.js"></script>
+    
+
+    
+     
+        <script src="../../../_static/cloud.js"></script>
+    
+
+    <link rel="shortcut icon" href="../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head><body>
+    <div class="relbar-top">
+        
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> &nbsp; &nbsp;</li>
+    <li><a href="../../../index.html">Portable Submission Interface for Jobs 0.0.1 documentation</a> &#187;</li>
+
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">psij.executors.saga</a></li> 
+      </ul>
+    </div>
+    </div>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for psij.executors.saga</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">atexit</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">threading</span> <span class="k">import</span> <span class="n">RLock</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="k">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span>
+
+<span class="kn">import</span> <span class="nn">radical.saga</span> <span class="k">as</span> <span class="nn">rs</span>
+<span class="kn">import</span> <span class="nn">radical.saga.job.constants</span> <span class="k">as</span> <span class="nn">ct</span>
+<span class="kn">import</span> <span class="nn">time</span>
+
+<span class="kn">from</span> <span class="nn">psij</span> <span class="k">import</span> <span class="n">JobExecutor</span><span class="p">,</span> <span class="n">JobExecutorConfig</span><span class="p">,</span> <span class="n">JobState</span><span class="p">,</span> <span class="n">JobStatus</span><span class="p">,</span> <span class="n">Job</span><span class="p">,</span> \
+    <span class="n">SubmitException</span><span class="p">,</span> <span class="n">InvalidJobException</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="c1"># map SAGA states to jpsi states.</span>
+<span class="n">_STATE_MAP</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">NEW</span><span class="p">:</span> <span class="n">JobState</span><span class="o">.</span><span class="n">NEW</span><span class="p">,</span>
+    <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">PENDING</span><span class="p">:</span> <span class="n">JobState</span><span class="o">.</span><span class="n">QUEUED</span><span class="p">,</span>
+    <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">RUNNING</span><span class="p">:</span> <span class="n">JobState</span><span class="o">.</span><span class="n">ACTIVE</span><span class="p">,</span>
+    <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">DONE</span><span class="p">:</span> <span class="n">JobState</span><span class="o">.</span><span class="n">COMPLETED</span><span class="p">,</span>
+    <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">FAILED</span><span class="p">:</span> <span class="n">JobState</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span>
+    <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">CANCELED</span><span class="p">:</span> <span class="n">JobState</span><span class="o">.</span><span class="n">CANCELED</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">class</span> <span class="nc">_JobMapping</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jpsi_job</span><span class="p">:</span> <span class="n">Job</span><span class="p">,</span> <span class="n">saga_job</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">Job</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jpsi_job</span> <span class="o">=</span> <span class="n">jpsi_job</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">saga_job</span> <span class="o">=</span> <span class="n">saga_job</span>
+
+
+<div class="viewcode-block" id="SagaExecutor"><a class="viewcode-back" href="../../../.generated/psij.executors.html#psij.executors.saga.SagaExecutor">[docs]</a><span class="k">class</span> <span class="nc">SagaExecutor</span><span class="p">(</span><span class="n">JobExecutor</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    An executor that use SAGA to run jobs.</span>
+
+<span class="sd">    For details about SAGA, see https://en.wikipedia.org/wiki/Simple_API_for_Grid_Applications</span>
+<span class="sd">    and related links.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                 <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">JobExecutorConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes a `SagaExecutor`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        url</span>
+<span class="sd">            An URL representing a SAGA resource manager to connect to.</span>
+<span class="sd">        config</span>
+<span class="sd">            Not used.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># type: Dict[str, _JobMapping]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_js</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">config</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="n">JobExecutorConfig</span><span class="p">()</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">url</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">RLock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_js</span> <span class="o">=</span> <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">Service</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cb</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_close</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_js</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_js</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_js</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Removes process shutdown hooks added earlier.</span>
+
+<span class="sd">        The hooks are used to close the SAGA service used by this executor.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">atexit</span><span class="o">.</span><span class="n">unregister</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_close</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_close</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_state_cb</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">saga_job</span><span class="p">:</span> <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">Job</span><span class="p">,</span> <span class="n">metric</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">jpsi_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">job_mapping</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">job_mapping</span><span class="o">.</span><span class="n">saga_job</span> <span class="ow">and</span> <span class="n">job_mapping</span><span class="o">.</span><span class="n">saga_job</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="n">saga_job</span><span class="o">.</span><span class="n">id</span><span class="p">:</span>
+                    <span class="n">jpsi_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">job_mapping</span><span class="o">.</span><span class="n">jpsi_job</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">jpsi_id</span> <span class="ow">in</span> <span class="n">jpsi_ids</span><span class="p">:</span>
+            <span class="n">jpsi_job</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_jpsi_job</span><span class="p">(</span><span class="n">jpsi_id</span><span class="p">)</span>
+            <span class="n">ec</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">: </span><span class="si">%s</span><span class="s1"> - </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">jpsi_job</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">saga_job</span><span class="o">.</span><span class="n">state</span><span class="p">,</span> <span class="n">saga_job</span><span class="o">.</span><span class="n">id</span><span class="p">))</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">jpsi_job</span><span class="o">.</span><span class="n">_native_id</span><span class="p">:</span>
+                <span class="n">jpsi_job</span><span class="o">.</span><span class="n">_native_id</span> <span class="o">=</span> <span class="n">saga_job</span><span class="o">.</span><span class="n">id</span>
+
+            <span class="k">if</span> <span class="n">saga_job</span><span class="o">.</span><span class="n">state</span> <span class="ow">in</span> <span class="p">[</span><span class="n">rs</span><span class="o">.</span><span class="n">FAILED</span><span class="p">,</span> <span class="n">rs</span><span class="o">.</span><span class="n">DONE</span><span class="p">]:</span>
+                <span class="n">ec</span> <span class="o">=</span> <span class="n">saga_job</span><span class="o">.</span><span class="n">exit_code</span>
+
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> --&gt; </span><span class="si">%s</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">jpsi_id</span><span class="p">,</span> <span class="n">saga_job</span><span class="o">.</span><span class="n">state</span><span class="p">)</span>
+
+            <span class="n">job_status</span> <span class="o">=</span> <span class="n">JobStatus</span><span class="p">(</span><span class="n">_STATE_MAP</span><span class="p">[</span><span class="n">saga_job</span><span class="o">.</span><span class="n">state</span><span class="p">],</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span> <span class="n">exit_code</span><span class="o">=</span><span class="n">ec</span><span class="p">)</span>
+            <span class="n">jpsi_job</span><span class="o">.</span><span class="n">_set_status</span><span class="p">(</span><span class="n">job_status</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cb</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_cb</span><span class="o">.</span><span class="n">job_status_changed</span><span class="p">(</span><span class="n">jpsi_job</span><span class="p">,</span> <span class="n">job_status</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="SagaExecutor.submit"><a class="viewcode-back" href="../../../.generated/psij.executors.html#psij.executors.saga.SagaExecutor.submit">[docs]</a>    <span class="k">def</span> <span class="nf">submit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="n">Job</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Submits the specified :class:`~psij.Job` to be run using SAGA.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        job</span>
+<span class="sd">            The :class:`~psij.Job` to be submitted.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_js</span><span class="p">)</span>
+        <span class="c1"># derive SAGA job description and submit it</span>
+        <span class="n">job_mapping</span> <span class="o">=</span> <span class="n">_JobMapping</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">job_mapping</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">_executor</span> <span class="o">=</span> <span class="bp">self</span>
+
+        <span class="n">jd</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_job_2_descr</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
+        <span class="n">saga_job</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_js</span><span class="o">.</span><span class="n">create_job</span><span class="p">(</span><span class="n">jd</span><span class="p">)</span>
+
+        <span class="n">job_mapping</span><span class="o">.</span><span class="n">saga_job</span> <span class="o">=</span> <span class="n">saga_job</span>
+        <span class="n">saga_job</span><span class="o">.</span><span class="n">add_callback</span><span class="p">(</span><span class="n">rs</span><span class="o">.</span><span class="n">STATE</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state_cb</span><span class="p">)</span>
+
+        <span class="c1"># TODO: the backend attribute is not standard; why do we need it?</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_job_status</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">JobStatus</span><span class="p">(</span><span class="n">JobState</span><span class="o">.</span><span class="n">QUEUED</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">url</span><span class="p">}))</span>
+
+        <span class="n">saga_job</span><span class="o">.</span><span class="n">run</span><span class="p">()</span></div>
+
+    <span class="k">def</span> <span class="nf">_get_saga_job</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">Job</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">saga_job</span>
+
+    <span class="k">def</span> <span class="nf">_get_jpsi_job</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Job</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">jpsi_job</span>
+
+<div class="viewcode-block" id="SagaExecutor.list"><a class="viewcode-back" href="../../../.generated/psij.executors.html#psij.executors.saga.SagaExecutor.list">[docs]</a>    <span class="k">def</span> <span class="nf">list</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieves a list of native IDs corresponding to jobs known to this executor.</span>
+
+<span class="sd">        This method does not query the SAGA backend or any of the backends behind SAGA for jobs</span>
+<span class="sd">        not submitted through this executor. Furthermore, it simply returns the PSI-J job IDs of</span>
+<span class="sd">        the jobs rather than native IDs.</span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        A list of job IDs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="SagaExecutor.attach"><a class="viewcode-back" href="../../../.generated/psij.executors.html#psij.executors.saga.SagaExecutor.attach">[docs]</a>    <span class="k">def</span> <span class="nf">attach</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="n">Job</span><span class="p">,</span> <span class="n">native_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Attaches a job to a backend job.</span>
+
+<span class="sd">        This method does not quite do what it is meant to do at this time.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        job</span>
+<span class="sd">            The job to attach.</span>
+<span class="sd">        native_id</span>
+<span class="sd">            A PSI-J job ID</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">saga_job</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="c1"># try to find job in known jobs</span>
+            <span class="k">for</span> <span class="n">job_mapping</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">job_mapping</span><span class="o">.</span><span class="n">jpsi_job</span><span class="o">.</span><span class="n">status</span><span class="o">.</span><span class="n">metadata</span><span class="p">:</span>
+                    <span class="n">job_native_id</span> <span class="o">=</span> <span class="n">job_mapping</span><span class="o">.</span><span class="n">jpsi_job</span><span class="o">.</span><span class="n">status</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;native_id&#39;</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">job_native_id</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">if</span> <span class="n">job_native_id</span> <span class="o">==</span> <span class="n">native_id</span><span class="p">:</span>
+                        <span class="n">saga_job</span> <span class="o">=</span> <span class="n">job_mapping</span><span class="o">.</span><span class="n">saga_job</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">saga_job</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="c1"># found the native saga job, attach it to this job</span>
+                        <span class="n">job_mapping</span> <span class="o">=</span> <span class="n">_JobMapping</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">saga_job</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">job_mapping</span>
+                        <span class="k">break</span>
+
+            <span class="c1"># saga job is not known to this executor - re-connect via backend:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">assert</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_js</span><span class="p">)</span>
+                <span class="n">saga_job</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_js</span><span class="o">.</span><span class="n">get_job</span><span class="p">(</span><span class="n">native_id</span><span class="p">)</span>
+                <span class="n">job_mapping</span> <span class="o">=</span> <span class="n">_JobMapping</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">saga_job</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_jobs</span><span class="p">[</span><span class="n">job</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">job_mapping</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">saga_job</span><span class="p">:</span>
+            <span class="c1"># TODO: There is a discussion on the suitability of cancel()</span>
+            <span class="c1">#       throwing a SubmitException - same applies here</span>
+            <span class="k">raise</span> <span class="n">SubmitException</span><span class="p">(</span><span class="s1">&#39;Unknown native id: &quot;</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">native_id</span><span class="p">))</span>
+
+        <span class="c1"># we found the job and reconnected to it - update the job state</span>
+        <span class="n">job</span><span class="o">.</span><span class="n">_native_id</span> <span class="o">=</span> <span class="n">native_id</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">_STATE_MAP</span><span class="p">[</span><span class="n">saga_job</span><span class="o">.</span><span class="n">state</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">final</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_update_job_status</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">JobStatus</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">exit_code</span><span class="o">=</span><span class="n">saga_job</span><span class="o">.</span><span class="n">exit_code</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_update_job_status</span><span class="p">(</span><span class="n">job</span><span class="p">,</span> <span class="n">JobStatus</span><span class="p">(</span><span class="n">state</span><span class="p">))</span></div>
+
+    <span class="k">def</span> <span class="nf">_job_2_descr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="n">Job</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">Description</span><span class="p">:</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">spec</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">spec</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">InvalidJobException</span><span class="p">(</span><span class="s1">&#39;Missing specification.&#39;</span><span class="p">)</span>
+
+        <span class="n">jd</span> <span class="o">=</span> <span class="n">rs</span><span class="o">.</span><span class="n">job</span><span class="o">.</span><span class="n">Description</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">executable</span><span class="p">:</span>
+            <span class="n">jd</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">EXECUTABLE</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">executable</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">arguments</span><span class="p">:</span>
+            <span class="n">jd</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">ARGUMENTS</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">environment</span><span class="p">:</span>
+            <span class="n">jd</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">ENVIRONMENT</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">environment</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">stdin_path</span><span class="p">:</span>
+            <span class="n">jd</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">INPUT</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">stdin_path</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">stdout_path</span><span class="p">:</span>
+            <span class="n">jd</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">OUTPUT</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">stdout_path</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">stderr_path</span><span class="p">:</span>
+            <span class="n">jd</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">ERROR</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">stderr_path</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">directory</span><span class="p">:</span>
+            <span class="n">jd</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">WORKING_DIRECTORY</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">directory</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">jd</span>
+
+<div class="viewcode-block" id="SagaExecutor.cancel"><a class="viewcode-back" href="../../../.generated/psij.executors.html#psij.executors.saga.SagaExecutor.cancel">[docs]</a>    <span class="k">def</span> <span class="nf">cancel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">job</span><span class="p">:</span> <span class="n">Job</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Cancels a job.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        job</span>
+<span class="sd">            The job to cancel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">saga_job</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_saga_job</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">saga_job</span><span class="o">.</span><span class="n">state</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">rs</span><span class="o">.</span><span class="n">FINAL</span><span class="p">:</span>
+            <span class="n">saga_job</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span></div></div>
+</pre></div>
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+        </div>
+      </div>
+    
+    
+        <div class="sidebar-toggle-group no-js">
+            
+            <button class="sidebar-toggle" id="sidebar-hide" title="Hide the sidebar menu">
+                 «
+                <span class="show-for-small">hide menu</span>
+                
+            </button>
+            <button class="sidebar-toggle" id="sidebar-show" title="Show the sidebar menu">
+                
+                <span class="show-for-small">menu</span>
+                <span class="hide-for-small">sidebar</span>
+                 »
+            </button>
+        </div>
+    
+      <div class="clearer"></div>
+    </div>
+    <div class="relbar-bottom">
+        
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> &nbsp; &nbsp;</li>
+    <li><a href="../../../index.html">Portable Submission Interface for Jobs 0.0.1 documentation</a> &#187;</li>
+
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">psij.executors.saga</a></li> 
+      </ul>
+    </div>
+    </div>
+
+    <div class="footer" role="contentinfo">
+        &#169; Copyright The ExaWorks Team.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 4.4.0.
+    </div>
+    <!-- cloud_sptheme 1.4 -->
+  </body>
+</html>
